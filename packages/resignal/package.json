@@ -1,6 +1,6 @@
 {
   "name": "rsignal",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A React lib for controlling app flow",
   "author": "linq2js <linqtojs@gmail.com>",
   "repository": {
