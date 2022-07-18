@@ -1,6 +1,6 @@
 {
   "name": "resignal",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A React lib for controlling app flow",
   "author": "linq2js <linqtojs@gmail.com>",
   "repository": {
