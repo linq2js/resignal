@@ -1,0 +1,38 @@
+{
+  "name": "resignal",
+  "version": "0.0.0",
+  "description": "A React lib for controlling app flow",
+  "author": "linq2js <linqtojs@gmail.com>",
+  "repository": {
+    "url": "https://github.com/linq2js/resignal"
+  },
+  "homepage": "https://linq2js.github.io/resignal/",
+  "license": "ISC",
+  "main": "dist/tsc/main.js",
+  "types": "dist/tsc/main.d.ts",
+  "directories": {
+    "lib": "lib"
+  },
+  "files": [
+    "lib",
+    "dist/tsc"
+  ],
+  "keywords": [
+    "react",
+    "async",
+    "saga",
+    "task",
+    "state",
+    "state management",
+    "dynamic"
+  ],
+  "peerDependenciesMeta": {},
+  "scripts": {
+    "prepublishOnly": "yarn test && yarn && yarn build",
+    "lint": "eslint lib/ --ext .js,.jsx,.ts,.tsx",
+    "test": "jest --passWithNoTests --runInBand",
+    "clean": "rm -rf dist build package",
+    "ts-node": "ts-node",
+    "build": "rimraf dist && tsc && npx gzip-size ./dist/tsc/main.js"
+  }
+}
