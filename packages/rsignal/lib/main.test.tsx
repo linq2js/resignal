@@ -32,10 +32,10 @@ test("counter using payload", () => {
 
 test("race", async () => {
   const pressed = signal({ payload: false });
-  spawn(async ({ race, fork }) => {
+  spawn(async ({ race }) => {
     const result = await race({
-      one: fork(delay(10, 1)),
-      two: fork(delay(5, 2)),
+      one: delay(10, 1),
+      two: delay(5, 2),
     });
     expect(result.one).toBeUndefined();
     expect(result.two).not.toBeUndefined();
@@ -55,7 +55,7 @@ test("user auth", async () => {
   const loadUserProfileApi = (token: string) => ({
     username: token.split("|")[0],
   });
-  const loginApi = (username: string, password: string) =>
+  const loginApi = async (username: string, password: string) =>
     `${username}|${password}`;
 
   const loadProfileFlow = async (context: EffectContext) => {
@@ -132,4 +132,23 @@ test("user auth", async () => {
   await delay();
 
   expect(profileSignal.payload()?.username).toBe("anonymous");
+});
+
+test("when", async () => {
+  let count = 0;
+  const clicked = signal<number>();
+
+  spawn(async ({ when }) => {
+    await when(delay());
+    count++;
+    const value = await when(clicked);
+    count += value;
+  });
+
+  expect(count).toBe(0);
+  await delay();
+  expect(count).toBe(1);
+  clicked(2);
+  await delay();
+  expect(count).toBe(3);
 });

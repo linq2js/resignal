@@ -4,7 +4,7 @@
   "scripts": {
     "build-all": "lerna run build --no-private --parallel",
     "test-all": "lerna run test --no-private --parallel",
-    "docs": "npx typedoc --tsconfig ./packages/resignal/tsconfig.json --entryPoints ./packages/resignal/lib/main.ts --out ./docs",
+    "docs": "npx typedoc --tsconfig ./packages/rsignal/tsconfig.json --entryPoints ./packages/rsignal/lib/main.ts --out ./docs",
     "publish-all": "lerna publish",
     "bootstrap": "lerna bootstrap"
   },

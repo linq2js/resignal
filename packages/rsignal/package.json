@@ -4,9 +4,9 @@
   "description": "A React lib for controlling app flow",
   "author": "linq2js <linqtojs@gmail.com>",
   "repository": {
-    "url": "https://github.com/linq2js/resignal"
+    "url": "https://github.com/linq2js/rsignal"
   },
-  "homepage": "https://linq2js.github.io/resignal/",
+  "homepage": "https://linq2js.github.io/rsignal/",
   "license": "ISC",
   "main": "dist/tsc/main.js",
   "types": "dist/tsc/main.d.ts",

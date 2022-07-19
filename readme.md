@@ -2,4 +2,4 @@
 
 A React lib for controlling app flow
 
-[Documentation](./packages/resignal/readme.md)
+[Documentation](./packages/rsignal/readme.md)

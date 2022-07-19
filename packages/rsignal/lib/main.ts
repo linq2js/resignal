@@ -71,7 +71,7 @@ export type WaitOptions = {
 };
 
 export type EffectContext = {
-  promise?: Promise<void>;
+  promise?: CancellablePromise<any>;
 
   abortController(): AbortController | undefined;
 
@@ -80,22 +80,83 @@ export type EffectContext = {
    */
   cancel(): void;
 
+  /**
+   *
+   */
   cancelled(): boolean;
 
+  /**
+   *
+   * @param listener
+   */
   onCancel(listener: VoidFunction): VoidFunction;
 
+  /**
+   *
+   */
   dispose(): void;
 
-  all<T extends Record<string, AnySignal>>(
+  /**
+   *
+   * @param promise
+   */
+  when<T>(promise: Promise<T>): Promise<T>;
+
+  /**
+   *
+   * @param signal
+   * @param options
+   */
+  when<T>(signal: Signal<T>, options?: WaitOptions): Promise<T>;
+
+  /**
+   *
+   * @param signals
+   * @param options
+   */
+  all<T extends Record<string, AnySignal | Promise<any>>>(
     signals: T,
     options?: WaitOptions
-  ): Promise<T>;
+  ): Promise<{
+    [key in keyof T]: T[key] extends Promise<infer V> ? Signal<V, V> : T[key];
+  }>;
 
-  race<T extends Record<string, AnySignal>>(
+  /**
+   *
+   * @param signal
+   * @param callback
+   */
+  on<T extends AnySignal>(
+    signal: T,
+    callback: (signal: T) => void
+  ): VoidFunction;
+
+  /**
+   *
+   * @param signals
+   * @param callback
+   */
+  on(signals: SignalList, callback: (signal: AnySignal) => void): VoidFunction;
+
+  /**
+   *
+   * @param signals
+   * @param options
+   */
+  race<T extends Record<string, AnySignal | Promise<any>>>(
     signals: T,
     options?: WaitOptions
-  ): Promise<Partial<T>>;
+  ): Promise<
+    Partial<{
+      [key in keyof T]: T[key] extends Promise<infer V> ? Signal<V, V> : T[key];
+    }>
+  >;
 
+  /**
+   *
+   * @param fn
+   * @param args
+   */
   call<A extends any[], R>(
     fn: (context: EffectContext, ...args: A) => R,
     ...args: A
@@ -127,12 +188,16 @@ export type EffectContext = {
   fork<T>(payload: Exclude<Payload<T>, Function>): Signal<T>;
 };
 
+export type CancellablePromise<T = unknown> = Promise<T> & { cancel(): void };
+
 export type NoInfer<T> = [T][T extends any ? 0 : never];
+
+export type ChainItemResult = AnySignal | SignalList | void | "restart";
 
 export type ChainItem =
   | AnySignal
   | SignalList
-  | ((prev: AnySignal) => AnySignal | SignalList | void | "restart");
+  | ((prev: AnySignal) => ChainItemResult | Promise<ChainItemResult>);
 
 const signalType = {};
 
@@ -190,8 +255,14 @@ const forEachSignal = (
   }
 };
 
-export const delay = <T>(ms: number = 0, value?: T) =>
-  new Promise<T>((resolve) => setTimeout(resolve, ms, value));
+export const delay = <T>(ms: number = 0, value?: T): CancellablePromise<T> => {
+  let timer: any;
+
+  return Object.assign(
+    new Promise<T>((resolve) => (timer = setTimeout(resolve, ms, value))),
+    { cancel: () => clearTimeout(timer) }
+  );
+};
 
 const isAbortControllerSupported = typeof AbortController !== "undefined";
 
@@ -201,7 +272,7 @@ const createSignalContext = (): EffectContext => {
   const onCancel = createCallbackGroup();
   const onDispose = createCallbackGroup();
 
-  const wait = (race: boolean, signals: any, options?: WaitOptions) => {
+  const wait = (race: boolean, awaitables: any, options?: WaitOptions) => {
     return new Promise<any>((resolve, reject) => {
       let doneCount = 0;
       let done = false;
@@ -232,17 +303,18 @@ const createSignalContext = (): EffectContext => {
           resolve(result);
         }
       };
-      Object.keys(signals).forEach((key) => {
-        const signal: AnySignal = signals[key];
-        signalList.push(signal);
-
-        // if (signal.error() || !signal.async()) {
-        //   onDone(key, signal);
-        //   return;
-        // }
-
-        cleanup.add(signal.onEmit(() => onDone(key, signal)));
-        cleanup.add(signal.onError(() => onDone(key, signal)));
+      Object.keys(awaitables).forEach((key) => {
+        const awaitable = awaitables[key];
+        let s: AnySignal;
+        if (isPromiseLike(awaitable)) {
+          s = signal();
+          s(awaitable);
+        } else {
+          s = awaitable;
+        }
+        signalList.push(s);
+        cleanup.add(s.onEmit(() => onDone(key, s)));
+        cleanup.add(s.onError(() => onDone(key, s)));
       });
     });
   };
@@ -258,6 +330,7 @@ const createSignalContext = (): EffectContext => {
       if (cancelled) return;
       cancelled = true;
       abortController?.abort();
+      context.promise?.cancel();
       onCancel.call();
       onDispose.call();
     },
@@ -267,11 +340,32 @@ const createSignalContext = (): EffectContext => {
     onCancel(listener) {
       return onCancel.add(listener);
     },
-    all(signals, onError) {
-      return wait(false, signals, onError);
+    all(signals, options) {
+      return wait(false, signals, options);
     },
-    race(signals, onError) {
-      return wait(true, signals, onError);
+    on(singals: SignalList, onEmit: Function) {
+      const cleanup = createCallbackGroup();
+      cleanup.add(onDispose.add(cleanup.call));
+      forEachSignal(singals, (signal) => {
+        signal.onEmit(() => onEmit(signal));
+      });
+      return cleanup.call;
+    },
+    when(awaitable, options?) {
+      let s: AnySignal;
+      if (isPromiseLike(awaitable)) {
+        s = signal() as AnySignal;
+        s(awaitable);
+        awaitable = s;
+      } else {
+        s = awaitable;
+      }
+      return wait(true, { awaitable }, options as WaitOptions).then(() =>
+        s.payload()
+      ) as any;
+    },
+    race(signals, options) {
+      return wait(true, signals, options);
     },
     call(fn, ...args) {
       return fn(context, ...args);
@@ -296,7 +390,7 @@ const createSignalContext = (): EffectContext => {
           reject(error);
         };
 
-        const handleNext = (prevSignal?: AnySignal) => {
+        const handleNext = async (prevSignal?: AnySignal) => {
           cleanup?.call();
 
           if (!entries.length) {
@@ -307,7 +401,7 @@ const createSignalContext = (): EffectContext => {
           const entry = entries.shift();
           const signals =
             typeof entry === "function" && !isSignal(entry)
-              ? entry(prevSignal as AnySignal)
+              ? await entry(prevSignal as AnySignal)
               : entry;
           if (signals === "restart") {
             entries = inputEntries.slice();
@@ -401,26 +495,34 @@ export const signal: CreateSignal = (
         if (result === false) return;
         if (isPromiseLike(result)) {
           lastContext = context;
-          const promise = new Promise<void>((resolve, reject) => {
-            result
-              .then((value) => {
-                if (lastContext !== context) return;
-                payload = value;
-                lastContext = undefined;
-                context.dispose();
-                onEmit.call();
-                resolve(payload);
-              })
-              .catch((reason) => {
-                if (lastContext !== context) return;
-                lastContext = undefined;
-                error = reason;
-                !noDispose && context.dispose();
-                onError.call(reason);
-                reject(reason);
-              });
-          });
-          context.promise = promise.catch(noop);
+          const promise = Object.assign(
+            new Promise<void>((resolve, reject) => {
+              result
+                .then((value) => {
+                  if (lastContext !== context) return;
+                  payload = value;
+                  lastContext = undefined;
+                  context.dispose();
+                  onEmit.call();
+                  resolve(payload);
+                })
+                .catch((reason) => {
+                  if (lastContext !== context) return;
+                  lastContext = undefined;
+                  error = reason;
+                  !noDispose && context.dispose();
+                  onError.call(reason);
+                  reject(reason);
+                });
+            }),
+            {
+              cancel() {
+                (result as CancellablePromise)?.cancel?.();
+              },
+            }
+          );
+          promise.catch(noop);
+          context.promise = promise;
           onLoading.call(promise);
           return promise;
         }
