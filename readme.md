@@ -1,4 +1,4 @@
-# `[Re]act [Signal]`
+# `[R]eact [Signal]`
 
 A React lib for controlling app flow
 
